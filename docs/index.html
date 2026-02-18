@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revive — PDF to Interactive Quiz Converter</title>
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #e2e8f0;
+  --text-muted: #94a3b8;
+  --primary: #3b82f6;
+  --primary-hover: #2563eb;
+  --accent: #7c3aed;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #eab308;
+  --radius: 10px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ---- Layout ---- */
+.container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+header { text-align: center; padding: 3rem 0 2rem; }
+header h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
+header h1 span { color: var(--primary); }
+header p { color: var(--text-muted); font-size: 1.1rem; margin-top: 0.5rem; max-width: 600px; margin-left: auto; margin-right: auto; }
+
+/* ---- Tabs ---- */
+.tabs { display: flex; gap: 0; border-bottom: 2px solid var(--surface2); margin-bottom: 2rem; }
+.tab {
+  padding: 0.75rem 1.5rem; background: none; border: none; color: var(--text-muted);
+  font-size: 0.95rem; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: all 0.2s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ---- Cards / Sections ---- */
+.card {
+  background: var(--surface); border: 1px solid var(--surface2); border-radius: var(--radius);
+  padding: 1.5rem; margin-bottom: 1.5rem;
+}
+.card h2 { font-size: 1.15rem; margin-bottom: 1rem; }
+.card h3 { font-size: 1rem; color: var(--text-muted); margin-bottom: 0.75rem; }
+
+/* ---- Form Elements ---- */
+label { display: block; font-size: 0.875rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.35rem; }
+input[type="text"], input[type="number"], textarea, select {
+  width: 100%; padding: 0.6rem 0.85rem; background: var(--bg); border: 1px solid var(--surface2);
+  border-radius: 6px; color: var(--text); font-size: 0.95rem; font-family: inherit;
+  transition: border-color 0.2s;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--primary); }
+textarea { resize: vertical; min-height: 80px; }
+select { cursor: pointer; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group:last-child { margin-bottom: 0; }
+
+.checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+.checkbox-row label { margin-bottom: 0; cursor: pointer; }
+
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  padding: 0.65rem 1.4rem; border: none; border-radius: 8px; font-weight: 600;
+  font-size: 0.95rem; cursor: pointer; transition: all 0.2s; font-family: inherit;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover:not(:disabled) { background: #6d28d9; }
+.btn-secondary { background: var(--surface2); color: var(--text); }
+.btn-secondary:hover:not(:disabled) { background: var(--border); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover:not(:disabled) { background: #16a34a; }
+.btn-danger { background: var(--error); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #dc2626; }
+.btn-sm { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+.btn-block { width: 100%; justify-content: center; }
+
+.btn-group { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+
+/* ---- Question List ---- */
+.question-list { display: flex; flex-direction: column; gap: 1rem; }
+.question-item {
+  background: var(--bg); border: 1px solid var(--surface2); border-radius: 8px; padding: 1rem;
+  position: relative;
+}
+.question-item .q-header {
+  display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;
+}
+.question-item .q-number { font-weight: 700; color: var(--primary); font-size: 0.9rem; }
+.question-item .q-type {
+  font-size: 0.75rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 4px;
+}
+.q-type.reading { background: #1d4ed8; color: #dbeafe; }
+.q-type.listening { background: var(--accent); color: #ede9fe; }
+.question-item .q-text { font-size: 0.95rem; margin-bottom: 0.5rem; }
+.question-item .q-passage {
+  font-size: 0.85rem; color: var(--text-muted); border-left: 3px solid var(--primary);
+  padding-left: 0.75rem; margin-bottom: 0.5rem; max-height: 80px; overflow: hidden;
+}
+.question-item .q-options { font-size: 0.85rem; color: var(--text-muted); }
+.question-item .q-actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+
+.empty-state {
+  text-align: center; padding: 3rem; color: var(--text-muted); font-size: 0.95rem;
+}
+.empty-state svg { margin-bottom: 1rem; opacity: 0.5; }
+
+/* ---- Modal ---- */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100;
+  align-items: center; justify-content: center; padding: 1rem;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--surface); border: 1px solid var(--surface2); border-radius: 12px;
+  padding: 1.5rem; width: 100%; max-width: 700px; max-height: 90vh; overflow-y: auto;
+}
+.modal h2 { margin-bottom: 1rem; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 1.5rem; }
+
+/* ---- Option Editor ---- */
+.option-row {
+  display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;
+}
+.option-label-badge {
+  min-width: 2rem; height: 2rem; display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border-radius: 4px; font-weight: 700; font-size: 0.85rem;
+}
+.option-row input { flex: 1; }
+.option-row .correct-check { width: auto; cursor: pointer; }
+
+/* ---- Alerts ---- */
+.alert { padding: 0.75rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+.alert-info { background: #1e3a5f; border: 1px solid #3b82f6; color: #93c5fd; }
+.alert-success { background: #14532d; border: 1px solid var(--success); color: #86efac; }
+.alert-error { background: #450a0a; border: 1px solid var(--error); color: #fca5a5; }
+
+/* ---- Status / Toast ---- */
+.toast {
+  position: fixed; bottom: 2rem; right: 2rem; padding: 0.8rem 1.2rem;
+  background: var(--surface); border: 1px solid var(--success); border-radius: 8px;
+  color: var(--success); font-weight: 600; font-size: 0.9rem; z-index: 200;
+  transform: translateY(100px); opacity: 0; transition: all 0.3s;
+}
+.toast.show { transform: translateY(0); opacity: 1; }
+
+/* ---- JSON Import ---- */
+.json-area { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.85rem; min-height: 200px; }
+
+/* ---- Backend Panel ---- */
+.connection-status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.connected { background: var(--success); }
+.status-dot.disconnected { background: var(--error); }
+
+/* ---- Preview ---- */
+.preview-frame {
+  width: 100%; height: 600px; border: 1px solid var(--surface2); border-radius: 8px;
+  background: #fff;
+}
+
+/* ---- Footer ---- */
+footer { text-align: center; padding: 2rem 0; color: var(--text-muted); font-size: 0.85rem; }
+footer a { color: var(--primary); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  header h1 { font-size: 1.8rem; }
+  .form-row { grid-template-columns: 1fr; }
+  .tabs { overflow-x: auto; }
+  .tab { white-space: nowrap; padding: 0.6rem 1rem; font-size: 0.85rem; }
+  .container { padding: 1rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>Re<span>vive</span></h1>
+    <p>Transform legacy educational PDFs into modern, interactive HTML quizzes. Build questions, generate standalone files, download and use offline.</p>
+  </header>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-tab="builder">Quiz Builder</button>
+    <button class="tab" data-tab="import">Import JSON</button>
+    <button class="tab" data-tab="backend">PDF Upload</button>
+    <button class="tab" data-tab="about">About</button>
+  </div>
+
+  <!-- ==================== TAB: Quiz Builder ==================== -->
+  <div class="tab-panel active" id="tab-builder">
+    <!-- Quiz Settings -->
+    <div class="card">
+      <h2>Quiz Settings</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="quizTitle">Quiz Title</label>
+          <input type="text" id="quizTitle" value="Interactive Quiz" placeholder="e.g. Russian Reading Comprehension">
+        </div>
+        <div class="form-group">
+          <label for="quizLanguage">UI Language</label>
+          <select id="quizLanguage">
+            <option value="mixed">Mixed (Russian passages, English UI)</option>
+            <option value="english">English</option>
+            <option value="russian">Russian</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="maxPlays">Audio Play Limit</label>
+          <input type="number" id="maxPlays" value="2" min="1" max="10">
+        </div>
+        <div></div>
+      </div>
+    </div>
+
+    <!-- Questions -->
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <h2 style="margin-bottom:0;">Questions (<span id="questionCount">0</span>)</h2>
+        <div class="btn-group">
+          <button class="btn btn-primary btn-sm" onclick="openAddQuestion()">+ Add Question</button>
+        </div>
+      </div>
+
+      <div id="questionList" class="question-list">
+        <div class="empty-state" id="emptyState">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg>
+          <div>No questions yet. Click <strong>"+ Add Question"</strong> to get started, or switch to the <strong>Import JSON</strong> tab to paste questions from a backend or other source.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate -->
+    <div class="card">
+      <h2>Generate & Download</h2>
+      <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+        Generates a standalone HTML file with all CSS/JS inlined. Works offline — no server needed.
+      </p>
+      <div class="btn-group">
+        <button class="btn btn-success" id="btnGenerate" onclick="generateQuiz()" disabled>Generate Quiz HTML</button>
+        <button class="btn btn-secondary" id="btnPreview" onclick="previewQuiz()" disabled>Preview</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB: Import JSON ==================== -->
+  <div class="tab-panel" id="tab-import">
+    <div class="card">
+      <h2>Import Questions from JSON</h2>
+      <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+        Paste a JSON array of questions (from the <code>/api/process</code> endpoint or any compatible source). Questions will be added to the builder.
+      </p>
+      <div class="form-group">
+        <label for="jsonInput">Questions JSON</label>
+        <textarea id="jsonInput" class="json-area" placeholder='[
+  {
+    "id": 1,
+    "type": "reading",
+    "passage": "Тунисские врачи недавно выяснили, что...",
+    "passageLanguage": "russian",
+    "question": "What did Tunisian doctors discover?",
+    "questionLanguage": "english",
+    "options": [
+      {"label": "A", "text": "Option A"},
+      {"label": "B", "text": "Option B"},
+      {"label": "C", "text": "Option C"},
+      {"label": "D", "text": "Option D"}
+    ],
+    "correctAnswer": "A",
+    "explanation": ""
+  }
+]'></textarea>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="importJSON()">Import Questions</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('jsonInput').value=''">Clear</button>
+      </div>
+      <div id="importFeedback" style="margin-top:1rem;"></div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB: PDF Upload (Backend) ==================== -->
+  <div class="tab-panel" id="tab-backend">
+    <div class="card">
+      <h2>Connect to Backend</h2>
+      <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">
+        To extract questions from PDFs automatically, you need the Revive backend running locally. See the <a href="https://github.com/arwrubel/Revive" style="color:var(--primary)">README</a> for setup instructions.
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="backendUrl">Backend URL</label>
+          <input type="text" id="backendUrl" value="http://localhost:3001" placeholder="http://localhost:3001">
+        </div>
+        <div class="form-group" style="display:flex; align-items:flex-end;">
+          <button class="btn btn-secondary" onclick="testConnection()">Test Connection</button>
+        </div>
+      </div>
+      <div class="connection-status" id="connStatus">
+        <span class="status-dot disconnected"></span> <span>Not connected</span>
+      </div>
+    </div>
+
+    <div class="card" id="uploadCard">
+      <h2>Upload & Process PDF</h2>
+      <div class="form-group">
+        <label for="pdfFile">Select PDF</label>
+        <input type="file" id="pdfFile" accept=".pdf" style="color:var(--text);">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="procLanguage">Language</label>
+          <select id="procLanguage">
+            <option value="mixed">Mixed (Russian + English)</option>
+            <option value="russian">Russian</option>
+            <option value="english">English</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="procType">Question Type</label>
+          <select id="procType">
+            <option value="reading">Reading</option>
+            <option value="listening">Listening</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </div>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="procPunctuation" checked>
+        <label for="procPunctuation">Apply Russian punctuation rules</label>
+      </div>
+      <button class="btn btn-accent btn-block" id="btnProcess" onclick="uploadAndProcess()" disabled>Upload & Extract Questions</button>
+      <div id="processFeedback" style="margin-top:1rem;"></div>
+    </div>
+  </div>
+
+  <!-- ==================== TAB: About ==================== -->
+  <div class="tab-panel" id="tab-about">
+    <div class="card">
+      <h2>About Revive</h2>
+      <p style="margin-bottom:1rem;">
+        Revive converts legacy educational PDFs — especially DLPT (Defense Language Proficiency Test) materials — into modern, interactive HTML quizzes that work offline.
+      </p>
+      <h3>Features</h3>
+      <ul style="margin-left:1.5rem; margin-bottom:1rem; color:var(--text-muted);">
+        <li>AI-powered question extraction from PDFs (via Claude API)</li>
+        <li>Bilingual Russian/English support with proper Cyrillic punctuation</li>
+        <li>Audio listening comprehension with configurable play limits</li>
+        <li>DLPT-style transcript reveal (only after answering)</li>
+        <li>100% standalone HTML output — works offline, no dependencies</li>
+        <li>Manual quiz builder for creating questions without a PDF</li>
+      </ul>
+      <h3>How It Works</h3>
+      <ol style="margin-left:1.5rem; margin-bottom:1rem; color:var(--text-muted);">
+        <li><strong>Upload a PDF</strong> (requires backend) or <strong>add questions manually</strong></li>
+        <li><strong>Review and edit</strong> questions in the builder</li>
+        <li><strong>Generate</strong> a standalone HTML quiz file</li>
+        <li><strong>Download</strong> and share — it works anywhere, offline</li>
+      </ol>
+      <h3>Russian Punctuation</h3>
+      <p style="color:var(--text-muted); margin-bottom:0.5rem;">When processing Russian text, these rules are applied automatically:</p>
+      <ul style="margin-left:1.5rem; color:var(--text-muted);">
+        <li>Guillemets <strong>«»</strong> for all quotations (not "" or "")</li>
+        <li>Em-dashes <strong>—</strong> for dialogue and ranges (not hyphens)</li>
+        <li>Commas before subordinating conjunctions (что, который, где, когда, etc.)</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    Built with Revive &mdash; <a href="https://github.com/arwrubel/Revive">GitHub Repository</a>
+  </footer>
+</div>
+
+<!-- ==================== Question Editor Modal ==================== -->
+<div class="modal-overlay" id="questionModal">
+  <div class="modal">
+    <h2 id="modalTitle">Add Question</h2>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="mType">Type</label>
+        <select id="mType">
+          <option value="reading">Reading</option>
+          <option value="listening">Listening</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="mPassageLang">Passage Language</label>
+        <select id="mPassageLang">
+          <option value="russian">Russian</option>
+          <option value="english">English</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="mPassage">Passage / Transcript</label>
+      <textarea id="mPassage" rows="4" placeholder="Enter the reading passage or listening transcript (Cyrillic supported)..."></textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="mQuestion">Question Text</label>
+      <input type="text" id="mQuestion" placeholder="e.g. What is the main idea of the passage?">
+    </div>
+
+    <div class="form-group">
+      <label>Answer Options (check the correct answer)</label>
+      <div id="optionsEditor">
+        <div class="option-row">
+          <span class="option-label-badge">A</span>
+          <input type="text" id="mOptA" placeholder="Option A">
+          <input type="radio" name="correctOpt" value="A" class="correct-check" checked title="Mark as correct">
+        </div>
+        <div class="option-row">
+          <span class="option-label-badge">B</span>
+          <input type="text" id="mOptB" placeholder="Option B">
+          <input type="radio" name="correctOpt" value="B" class="correct-check" title="Mark as correct">
+        </div>
+        <div class="option-row">
+          <span class="option-label-badge">C</span>
+          <input type="text" id="mOptC" placeholder="Option C">
+          <input type="radio" name="correctOpt" value="C" class="correct-check" title="Mark as correct">
+        </div>
+        <div class="option-row">
+          <span class="option-label-badge">D</span>
+          <input type="text" id="mOptD" placeholder="Option D">
+          <input type="radio" name="correctOpt" value="D" class="correct-check" title="Mark as correct">
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="mExplanation">Explanation (optional)</label>
+      <input type="text" id="mExplanation" placeholder="Brief explanation of the correct answer">
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="btnSaveQuestion" onclick="saveQuestion()">Add Question</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Preview Modal ==================== -->
+<div class="modal-overlay" id="previewModal">
+  <div class="modal" style="max-width:900px; padding:1rem;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+      <h2 style="margin-bottom:0;">Quiz Preview</h2>
+      <button class="btn btn-secondary btn-sm" onclick="closePreview()">Close</button>
+    </div>
+    <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts"></iframe>
+  </div>
+</div>
+
+<!-- ==================== Toast ==================== -->
+<div class="toast" id="toast"></div>
+
+<script>
+(function() {
+  "use strict";
+
+  // ---- State ----
+  var questions = [];
+  var editingIndex = -1; // -1 = adding new
+  var backendConnected = false;
+
+  // ---- Tab Navigation ----
+  document.querySelectorAll(".tab").forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      document.querySelectorAll(".tab").forEach(function(t) { t.classList.remove("active"); });
+      document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      document.getElementById("tab-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+
+  // ---- Render Questions ----
+  function renderQuestions() {
+    var list = document.getElementById("questionList");
+    var empty = document.getElementById("emptyState");
+    document.getElementById("questionCount").textContent = questions.length;
+    document.getElementById("btnGenerate").disabled = questions.length === 0;
+    document.getElementById("btnPreview").disabled = questions.length === 0;
+
+    if (questions.length === 0) {
+      empty.style.display = "block";
+      list.innerHTML = "";
+      list.appendChild(empty);
+      return;
+    }
+
+    empty.style.display = "none";
+    var html = "";
+    for (var i = 0; i < questions.length; i++) {
+      var q = questions[i];
+      html += '<div class="question-item">';
+      html += '<div class="q-header">';
+      html += '<span class="q-number">Q' + (i + 1) + '</span>';
+      html += '<span class="q-type ' + q.type + '">' + q.type + '</span>';
+      html += '</div>';
+      if (q.passage) {
+        html += '<div class="q-passage">' + esc(q.passage) + '</div>';
+      }
+      html += '<div class="q-text">' + esc(q.question) + '</div>';
+      if (q.options) {
+        html += '<div class="q-options">';
+        for (var j = 0; j < q.options.length; j++) {
+          var o = q.options[j];
+          var mark = o.label === q.correctAnswer ? ' <strong style="color:var(--success);">[correct]</strong>' : '';
+          html += o.label + ': ' + esc(o.text) + mark + '&nbsp;&nbsp;';
+        }
+        html += '</div>';
+      }
+      html += '<div class="q-actions">';
+      html += '<button class="btn btn-secondary btn-sm" onclick="editQuestion(' + i + ')">Edit</button>';
+      html += '<button class="btn btn-danger btn-sm" onclick="deleteQuestion(' + i + ')">Delete</button>';
+      if (i > 0) html += '<button class="btn btn-secondary btn-sm" onclick="moveQuestion(' + i + ',-1)">Up</button>';
+      if (i < questions.length - 1) html += '<button class="btn btn-secondary btn-sm" onclick="moveQuestion(' + i + ',1)">Down</button>';
+      html += '</div></div>';
+    }
+    list.innerHTML = html;
+  }
+
+  function esc(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ---- Add / Edit Question ----
+  window.openAddQuestion = function() {
+    editingIndex = -1;
+    document.getElementById("modalTitle").textContent = "Add Question";
+    document.getElementById("btnSaveQuestion").textContent = "Add Question";
+    // Clear fields
+    document.getElementById("mType").value = "reading";
+    document.getElementById("mPassageLang").value = "russian";
+    document.getElementById("mPassage").value = "";
+    document.getElementById("mQuestion").value = "";
+    document.getElementById("mOptA").value = "";
+    document.getElementById("mOptB").value = "";
+    document.getElementById("mOptC").value = "";
+    document.getElementById("mOptD").value = "";
+    document.getElementById("mExplanation").value = "";
+    document.querySelector('input[name="correctOpt"][value="A"]').checked = true;
+    document.getElementById("questionModal").classList.add("open");
+  };
+
+  window.editQuestion = function(idx) {
+    editingIndex = idx;
+    var q = questions[idx];
+    document.getElementById("modalTitle").textContent = "Edit Question " + (idx + 1);
+    document.getElementById("btnSaveQuestion").textContent = "Save Changes";
+    document.getElementById("mType").value = q.type || "reading";
+    document.getElementById("mPassageLang").value = q.passageLanguage || "russian";
+    document.getElementById("mPassage").value = q.passage || "";
+    document.getElementById("mQuestion").value = q.question || "";
+    var opts = q.options || [];
+    document.getElementById("mOptA").value = opts[0] ? opts[0].text : "";
+    document.getElementById("mOptB").value = opts[1] ? opts[1].text : "";
+    document.getElementById("mOptC").value = opts[2] ? opts[2].text : "";
+    document.getElementById("mOptD").value = opts[3] ? opts[3].text : "";
+    document.getElementById("mExplanation").value = q.explanation || "";
+    var correct = q.correctAnswer || "A";
+    var radio = document.querySelector('input[name="correctOpt"][value="' + correct + '"]');
+    if (radio) radio.checked = true;
+    document.getElementById("questionModal").classList.add("open");
+  };
+
+  window.saveQuestion = function() {
+    var qText = document.getElementById("mQuestion").value.trim();
+    if (!qText) { alert("Question text is required."); return; }
+
+    var correct = document.querySelector('input[name="correctOpt"]:checked').value;
+    var q = {
+      id: editingIndex >= 0 ? questions[editingIndex].id : Date.now(),
+      type: document.getElementById("mType").value,
+      passage: document.getElementById("mPassage").value.trim(),
+      passageLanguage: document.getElementById("mPassageLang").value,
+      question: qText,
+      questionLanguage: "english",
+      options: [
+        { label: "A", text: document.getElementById("mOptA").value.trim() },
+        { label: "B", text: document.getElementById("mOptB").value.trim() },
+        { label: "C", text: document.getElementById("mOptC").value.trim() },
+        { label: "D", text: document.getElementById("mOptD").value.trim() }
+      ],
+      correctAnswer: correct,
+      explanation: document.getElementById("mExplanation").value.trim()
+    };
+
+    if (editingIndex >= 0) {
+      questions[editingIndex] = q;
+      showToast("Question " + (editingIndex + 1) + " updated");
+    } else {
+      questions.push(q);
+      showToast("Question added");
+    }
+
+    closeModal();
+    renderQuestions();
+  };
+
+  window.closeModal = function() {
+    document.getElementById("questionModal").classList.remove("open");
+  };
+
+  window.deleteQuestion = function(idx) {
+    if (!confirm("Delete question " + (idx + 1) + "?")) return;
+    questions.splice(idx, 1);
+    renumber();
+    renderQuestions();
+    showToast("Question deleted");
+  };
+
+  window.moveQuestion = function(idx, dir) {
+    var target = idx + dir;
+    if (target < 0 || target >= questions.length) return;
+    var tmp = questions[idx];
+    questions[idx] = questions[target];
+    questions[target] = tmp;
+    renumber();
+    renderQuestions();
+  };
+
+  function renumber() {
+    for (var i = 0; i < questions.length; i++) {
+      questions[i].id = i + 1;
+    }
+  }
+
+  // ---- Import JSON ----
+  window.importJSON = function() {
+    var raw = document.getElementById("jsonInput").value.trim();
+    var feedback = document.getElementById("importFeedback");
+    if (!raw) {
+      feedback.innerHTML = '<div class="alert alert-error">Please paste a JSON array.</div>';
+      return;
+    }
+    try {
+      // Strip markdown fences if present
+      raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error("Expected an array");
+      if (parsed.length === 0) throw new Error("Array is empty");
+
+      // Validate shape
+      for (var i = 0; i < parsed.length; i++) {
+        if (!parsed[i].question) throw new Error("Question " + (i + 1) + " is missing 'question' field");
+        parsed[i].id = questions.length + i + 1;
+        parsed[i].type = parsed[i].type || "reading";
+        parsed[i].passageLanguage = parsed[i].passageLanguage || "russian";
+        parsed[i].questionLanguage = parsed[i].questionLanguage || "english";
+        parsed[i].options = parsed[i].options || [];
+        parsed[i].correctAnswer = parsed[i].correctAnswer || null;
+        parsed[i].explanation = parsed[i].explanation || "";
+      }
+
+      questions = questions.concat(parsed);
+      renumber();
+      renderQuestions();
+      feedback.innerHTML = '<div class="alert alert-success">Imported ' + parsed.length + ' question(s). Switch to the Quiz Builder tab to review.</div>';
+      showToast(parsed.length + " questions imported");
+    } catch (e) {
+      feedback.innerHTML = '<div class="alert alert-error">Invalid JSON: ' + esc(e.message) + '</div>';
+    }
+  };
+
+  // ---- Backend Connection ----
+  window.testConnection = function() {
+    var url = document.getElementById("backendUrl").value.replace(/\/+$/, "");
+    var status = document.getElementById("connStatus");
+    status.innerHTML = '<span class="status-dot disconnected"></span> <span>Testing...</span>';
+
+    fetch(url + "/health")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === "ok") {
+          backendConnected = true;
+          status.innerHTML = '<span class="status-dot connected"></span> <span>Connected (v' + (data.version || "?") + ', API key: ' + (data.hasApiKey ? "set" : "missing") + ')</span>';
+          document.getElementById("btnProcess").disabled = false;
+        } else {
+          throw new Error("Unexpected response");
+        }
+      })
+      .catch(function() {
+        backendConnected = false;
+        status.innerHTML = '<span class="status-dot disconnected"></span> <span>Cannot reach backend. Is it running?</span>';
+        document.getElementById("btnProcess").disabled = true;
+      });
+  };
+
+  // ---- Upload & Process PDF ----
+  window.uploadAndProcess = function() {
+    var fileInput = document.getElementById("pdfFile");
+    var feedback = document.getElementById("processFeedback");
+    var btn = document.getElementById("btnProcess");
+    var url = document.getElementById("backendUrl").value.replace(/\/+$/, "");
+
+    if (!fileInput.files || !fileInput.files[0]) {
+      feedback.innerHTML = '<div class="alert alert-error">Please select a PDF file.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Uploading...";
+    feedback.innerHTML = '<div class="alert alert-info">Uploading PDF...</div>';
+
+    var form = new FormData();
+    form.append("pdf", fileInput.files[0]);
+
+    fetch(url + "/api/upload", { method: "POST", body: form })
+      .then(function(r) {
+        if (!r.ok) throw new Error("Upload failed: " + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        feedback.innerHTML = '<div class="alert alert-info">Processing with Claude AI... This may take a minute.</div>';
+        btn.textContent = "Processing...";
+
+        return fetch(url + "/api/process", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileId: data.fileId,
+            addPunctuation: document.getElementById("procPunctuation").checked,
+            language: document.getElementById("procLanguage").value,
+            questionType: document.getElementById("procType").value
+          })
+        });
+      })
+      .then(function(r) {
+        if (!r.ok) throw new Error("Processing failed: " + r.status);
+        return r.json();
+      })
+      .then(function(data) {
+        if (data.questions && data.questions.length > 0) {
+          var startIdx = questions.length;
+          questions = questions.concat(data.questions);
+          renumber();
+          renderQuestions();
+          feedback.innerHTML = '<div class="alert alert-success">Extracted ' + data.questions.length + ' questions! Switch to Quiz Builder to review.</div>';
+          showToast(data.questions.length + " questions extracted");
+        } else {
+          feedback.innerHTML = '<div class="alert alert-error">No questions found in the PDF.</div>';
+        }
+      })
+      .catch(function(e) {
+        feedback.innerHTML = '<div class="alert alert-error">' + esc(e.message) + '</div>';
+      })
+      .finally(function() {
+        btn.disabled = false;
+        btn.textContent = "Upload & Extract Questions";
+      });
+  };
+
+  // ---- Generate Quiz HTML (client-side) ----
+  window.generateQuiz = function() {
+    if (questions.length === 0) return;
+    var html = buildQuizHTML();
+    downloadFile(html, slugify(document.getElementById("quizTitle").value) + ".html", "text/html");
+    showToast("Quiz downloaded!");
+  };
+
+  window.previewQuiz = function() {
+    if (questions.length === 0) return;
+    var html = buildQuizHTML();
+    var frame = document.getElementById("previewFrame");
+    frame.srcdoc = html;
+    document.getElementById("previewModal").classList.add("open");
+  };
+
+  window.closePreview = function() {
+    document.getElementById("previewModal").classList.remove("open");
+    document.getElementById("previewFrame").srcdoc = "";
+  };
+
+  function slugify(str) {
+    return str.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "quiz";
+  }
+
+  function downloadFile(content, filename, type) {
+    var blob = new Blob([content], { type: type + ";charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
+  // ---- Build Standalone Quiz HTML (mirrors backend htmlService) ----
+  function buildQuizHTML() {
+    var title = document.getElementById("quizTitle").value || "Interactive Quiz";
+    var language = document.getElementById("quizLanguage").value;
+    var maxPlays = parseInt(document.getElementById("maxPlays").value) || 2;
+    var ui = getUI(language);
+
+    return '<!DOCTYPE html>\n<html lang="' + (language === "russian" ? "ru" : "en") + '">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>' + escH(title) + '</title>\n<style>\n' + quizCSS() + '\n</style>\n</head>\n<body>\n<div id="app">\n  <header>\n    <h1>' + escH(title) + '</h1>\n    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>\n    <div class="progress-text" id="progressText">0 / ' + questions.length + '</div>\n  </header>\n  <main id="quizContainer"></main>\n  <div id="resultsPanel" class="results hidden">\n    <h2>' + ui.results + '</h2>\n    <div class="score" id="scoreDisplay"></div>\n    <div class="score-bar"><div class="score-fill" id="scoreFill"></div></div>\n    <div id="reviewContainer"></div>\n    <button class="btn btn-primary" onclick="resetQuiz()">' + ui.tryAgain + '</button>\n  </div>\n</div>\n<script>\n' + quizJS(ui, maxPlays) + '\n<\/script>\n</body>\n</html>';
+  }
+
+  function getUI(lang) {
+    if (lang === "russian") return { question:"Вопрос", reading:"Чтение", listening:"Аудирование", play:"Воспроизвести", playsRemaining:"Осталось воспроизведений", passageRu:"Текст для чтения", passageEn:"Reading Passage", transcript:"Транскрипт", correct:"Правильно!", incorrect:"Неправильно.", correctAnswerIs:"Правильный ответ:", yourAnswer:"Ваш ответ", previous:"Назад", next:"Далее", finish:"Завершить", results:"Результаты", tryAgain:"Попробовать снова" };
+    return { question:"Question", reading:"Reading", listening:"Listening", play:"Play Audio", playsRemaining:"Plays remaining", passageRu:"Текст для чтения", passageEn:"Reading Passage", transcript:"Transcript", correct:"Correct!", incorrect:"Incorrect.", correctAnswerIs:"Correct answer:", yourAnswer:"Your answer", previous:"Previous", next:"Next", finish:"Finish", results:"Results", tryAgain:"Try Again" };
+  }
+
+  function quizJS(ui, maxPlays) {
+    return '(function(){' +
+    '"use strict";' +
+    'var questions=' + JSON.stringify(questions) + ';' +
+    'var audioData={};' +
+    'var maxPlays=' + maxPlays + ';' +
+    'var ui=' + JSON.stringify(ui) + ';' +
+    'var answers={};var playCounters={};var currentQuestion=0;' +
+    'function init(){renderQuestion(0);updateProgress();}' +
+    'function renderQuestion(index){var container=document.getElementById("quizContainer");var q=questions[index];if(!q)return;var html=\'<div class="question-card">\';html+=\'<div class="question-header">\';html+=\'<span class="question-number">\'+ui.question+" "+(index+1)+" / "+questions.length+"</span>";html+=\'<span class="question-type badge-\'+q.type+\'">\' + (q.type==="listening"?ui.listening:ui.reading)+"</span>";html+="</div>";' +
+    'if(q.type==="listening"&&audioData[q.id]){var plays=playCounters[q.id]!==undefined?playCounters[q.id]:maxPlays;playCounters[q.id]=plays;html+=\'<div class="audio-section">\';html+=\'<audio id="audio-\'+q.id+\'" src="\'+audioData[q.id]+\'" preload="auto"></audio>\';html+=\'<button class="btn btn-audio" id="playBtn-\'+q.id+\'" onclick="playAudio(\'+q.id+\')"\'+(plays<=0?" disabled":"")+">"+ui.play+"</button>";html+=\'<span class="play-count" id="playCount-\'+q.id+\'">\'+ui.playsRemaining+": "+plays+"</span>";html+="</div>";}' +
+    'if(q.passage){var pL=q.passageLanguage==="russian"?"ru":"en";html+=\'<div class="passage" lang="\'+pL+\'">\';html+=\'<div class="passage-label">\'+(q.passageLanguage==="russian"?ui.passageRu:ui.passageEn)+"</div>";html+="<p>"+escH(q.passage)+"</p></div>";}' +
+    'html+=\'<div class="question-text">\'+escH(q.question)+"</div>";html+=\'<div class="options">\';var opts=q.options||[];for(var i=0;i<opts.length;i++){var o=opts[i];var selected=answers[q.id]===o.label;var answered=answers[q.id]!==undefined;var isCorrect=q.correctAnswer===o.label;var cls="option";if(selected)cls+=" selected";if(answered&&isCorrect)cls+=" correct";if(answered&&selected&&!isCorrect)cls+=" incorrect";html+=\'<button class="\'+cls+\'" onclick="selectOption(\'+index+",\'"+o.label+"\')" "+(answered?"disabled":"")+">"+\'<span class="option-label">\'+o.label+"</span>"+\'<span class="option-text">\'+escH(o.text)+"</span></button>";}html+="</div>";' +
+    'if(answers[q.id]!==undefined){var correct=answers[q.id]===q.correctAnswer;html+=\'<div class="feedback \'+(correct?"feedback-correct":"feedback-incorrect")+\'">\';html+=correct?ui.correct:ui.incorrect;if(!correct&&q.correctAnswer)html+=" "+ui.correctAnswerIs+" "+q.correctAnswer;if(q.explanation)html+=\'<div class="explanation">\'+escH(q.explanation)+"</div>";html+="</div>";if(q.type==="listening"&&q.passage){html+=\'<div class="transcript" lang="\'+(q.passageLanguage==="russian"?"ru":"en")+\'">\';html+=\'<div class="transcript-label">\'+ui.transcript+"</div><p>"+escH(q.passage)+"</p></div>";}}' +
+    'html+=\'<div class="nav-buttons">\';if(index>0)html+=\'<button class="btn btn-secondary" onclick="goTo(\'+(index-1)+\')">\'+ui.previous+"</button>";if(index<questions.length-1)html+=\'<button class="btn btn-primary" onclick="goTo(\'+(index+1)+\')">\'+ui.next+"</button>";else{var allA=Object.keys(answers).length===questions.length;html+=\'<button class="btn btn-primary" onclick="showResults()" \'+(allA?"":"disabled")+">" +ui.finish+"</button>";}html+="</div></div>";container.innerHTML=html;currentQuestion=index;}' +
+    'function escH(s){if(!s)return"";return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}' +
+    'window.selectOption=function(qI,l){var q=questions[qI];answers[q.id]=l;renderQuestion(qI);updateProgress();};' +
+    'window.goTo=function(i){renderQuestion(i);};' +
+    'window.playAudio=function(qId){var a=document.getElementById("audio-"+qId);if(!a)return;var r=playCounters[qId];if(r<=0)return;a.currentTime=0;a.play();playCounters[qId]=r-1;var c=document.getElementById("playCount-"+qId);if(c)c.textContent=ui.playsRemaining+": "+playCounters[qId];if(playCounters[qId]<=0){var b=document.getElementById("playBtn-"+qId);if(b)b.disabled=true;}};' +
+    'function updateProgress(){var a=Object.keys(answers).length;var t=questions.length;var p=t>0?(a/t)*100:0;document.getElementById("progressFill").style.width=p+"%";document.getElementById("progressText").textContent=a+" / "+t;}' +
+    'window.showResults=function(){var c=0;for(var i=0;i<questions.length;i++)if(answers[questions[i].id]===questions[i].correctAnswer)c++;var t=questions.length;var p=t>0?Math.round(c/t*100):0;document.getElementById("quizContainer").classList.add("hidden");var panel=document.getElementById("resultsPanel");panel.classList.remove("hidden");document.getElementById("scoreDisplay").textContent=c+" / "+t+" ("+p+"%)";document.getElementById("scoreFill").style.width=p+"%";var rH="";for(var j=0;j<questions.length;j++){var q=questions[j];var ua=answers[q.id];var ic=ua===q.correctAnswer;rH+=\'<div class="review-item \'+(ic?"review-correct":"review-incorrect")+\'"><strong>\'+ui.question+" "+(j+1)+":</strong> "+escH(q.question)+"<br>"+ui.yourAnswer+": "+(ua||"—");if(!ic)rH+=" | "+ui.correctAnswerIs+" "+(q.correctAnswer||"—");rH+="</div>";}document.getElementById("reviewContainer").innerHTML=rH;};' +
+    'window.resetQuiz=function(){answers={};playCounters={};document.getElementById("resultsPanel").classList.add("hidden");document.getElementById("quizContainer").classList.remove("hidden");renderQuestion(0);updateProgress();};' +
+    'init();})();';
+  }
+
+  function quizCSS() {
+    return '*{margin:0;padding:0;box-sizing:border-box;}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh;line-height:1.6;}#app{max-width:800px;margin:0 auto;padding:1.5rem;}header{text-align:center;margin-bottom:2rem;}h1{font-size:1.5rem;margin-bottom:1rem;color:#f1f5f9;}h2{font-size:1.3rem;margin-bottom:1rem;color:#f1f5f9;}.hidden{display:none!important;}.progress-bar{width:100%;height:8px;background:#1e293b;border-radius:4px;overflow:hidden;margin-bottom:.5rem;}.progress-fill{height:100%;background:#3b82f6;transition:width .3s;border-radius:4px;}.progress-text{font-size:.875rem;color:#94a3b8;}.question-card{background:#1e293b;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;border:1px solid #334155;}.question-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;}.question-number{font-weight:600;color:#94a3b8;font-size:.875rem;}.badge-reading{background:#1d4ed8;color:#dbeafe;padding:.2rem .6rem;border-radius:4px;font-size:.75rem;font-weight:600;}.badge-listening{background:#7c3aed;color:#ede9fe;padding:.2rem .6rem;border-radius:4px;font-size:.75rem;font-weight:600;}.audio-section{display:flex;align-items:center;gap:1rem;margin-bottom:1rem;padding:.75rem;background:#0f172a;border-radius:8px;}.btn-audio{background:#7c3aed;color:#fff;border:none;padding:.5rem 1rem;border-radius:6px;cursor:pointer;font-weight:600;font-size:.875rem;}.btn-audio:hover:not(:disabled){background:#6d28d9;}.btn-audio:disabled{opacity:.4;cursor:not-allowed;}.play-count{font-size:.8rem;color:#a78bfa;}.passage{background:#0f172a;border-left:3px solid #3b82f6;padding:1rem;border-radius:0 8px 8px 0;margin-bottom:1rem;}.passage p{white-space:pre-wrap;}.passage-label{font-size:.75rem;color:#3b82f6;font-weight:600;margin-bottom:.5rem;text-transform:uppercase;}.question-text{font-size:1.05rem;font-weight:500;margin-bottom:1rem;color:#f1f5f9;}.options{display:flex;flex-direction:column;gap:.5rem;margin-bottom:1rem;}.option{display:flex;align-items:flex-start;gap:.75rem;width:100%;text-align:left;background:#0f172a;border:2px solid #334155;padding:.75rem 1rem;border-radius:8px;cursor:pointer;transition:border-color .2s,background .2s;color:#e2e8f0;font-size:.95rem;}.option:hover:not(:disabled){border-color:#3b82f6;background:#1a2744;}.option:disabled{cursor:default;}.option.selected{border-color:#3b82f6;background:#1e3a5f;}.option.correct{border-color:#22c55e;background:#14532d;}.option.incorrect{border-color:#ef4444;background:#450a0a;}.option-label{min-width:1.5rem;height:1.5rem;display:flex;align-items:center;justify-content:center;background:#334155;border-radius:4px;font-weight:700;font-size:.8rem;}.option-text{flex:1;}.feedback{padding:.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-weight:500;}.feedback-correct{background:#14532d;color:#86efac;border:1px solid #22c55e;}.feedback-incorrect{background:#450a0a;color:#fca5a5;border:1px solid #ef4444;}.explanation{margin-top:.5rem;font-weight:400;font-size:.9rem;opacity:.9;}.transcript{background:#1a1a2e;border-left:3px solid #a78bfa;padding:1rem;border-radius:0 8px 8px 0;margin-bottom:1rem;}.transcript p{white-space:pre-wrap;}.transcript-label{font-size:.75rem;color:#a78bfa;font-weight:600;margin-bottom:.5rem;text-transform:uppercase;}.nav-buttons{display:flex;justify-content:space-between;gap:1rem;}.btn{padding:.6rem 1.5rem;border:none;border-radius:8px;font-weight:600;cursor:pointer;font-size:.95rem;transition:background .2s;}.btn:disabled{opacity:.4;cursor:not-allowed;}.btn-primary{background:#3b82f6;color:#fff;}.btn-primary:hover:not(:disabled){background:#2563eb;}.btn-secondary{background:#334155;color:#e2e8f0;}.btn-secondary:hover:not(:disabled){background:#475569;}.results{background:#1e293b;border-radius:12px;padding:2rem;text-align:center;border:1px solid #334155;}.score{font-size:2rem;font-weight:700;color:#f1f5f9;margin:1rem 0;}.score-bar{width:100%;height:12px;background:#0f172a;border-radius:6px;overflow:hidden;margin-bottom:1.5rem;}.score-fill{height:100%;background:linear-gradient(90deg,#ef4444,#eab308,#22c55e);transition:width .5s;border-radius:6px;}.review-item{text-align:left;padding:.75rem;border-radius:6px;margin-bottom:.5rem;font-size:.9rem;}.review-correct{background:#14532d;border:1px solid #22c55e;}.review-incorrect{background:#450a0a;border:1px solid #ef4444;}@media(max-width:600px){#app{padding:1rem;}.question-card{padding:1rem;}.audio-section{flex-direction:column;align-items:flex-start;}h1{font-size:1.2rem;}}';
+  }
+
+  function escH(s) {
+    if (!s) return "";
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // ---- Toast ----
+  function showToast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function() { t.classList.remove("show"); }, 2500);
+  }
+
+  // ---- Init ----
+  renderQuestions();
+})();
+</script>
+
+</body>
+</html>
